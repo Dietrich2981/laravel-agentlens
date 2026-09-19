@@ -1,0 +1,6 @@
+# Keep the Composer dist slim: ship source + config only.
+/tests export-ignore
+/benchmarks export-ignore
+/.github export-ignore
+/phpunit.xml export-ignore
+/demo.gif export-ignore

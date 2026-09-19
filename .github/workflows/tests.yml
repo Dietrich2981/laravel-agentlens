@@ -38,6 +38,14 @@ jobs:
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.laravel }}" --no-interaction --no-update
 
+      - name: Allow audit-blocked Laravel 11 in CI
+        if: startsWith(matrix.laravel, '11.')
+        run: |
+          # Every laravel/framework:11.* is currently flagged by PKSA security
+          # advisories, so stock Composer refuses to install it. CI tests our
+          # code, not the framework's CVEs — lift the block for L11 jobs only.
+          composer config policy.advisories.block false --no-interaction
+
       - name: Install dependencies
         uses: ramsey/composer-install@v3
         with:
