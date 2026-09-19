@@ -1,5 +1,11 @@
 # agentlens — runtime logs your AI agent can actually read
 
+[![Tests](https://github.com/Dietrich2981/laravel-agentlens/actions/workflows/tests.yml/badge.svg)](https://github.com/Dietrich2981/laravel-agentlens/actions/workflows/tests.yml)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/agentlens/agentlens.svg)](https://packagist.org/packages/agentlens/agentlens)
+[![Total Downloads](https://img.shields.io/packagist/dt/agentlens/agentlens.svg)](https://packagist.org/packages/agentlens/agentlens)
+[![PHP Version](https://img.shields.io/packagist/php-v/agentlens/agentlens.svg)](https://packagist.org/packages/agentlens/agentlens)
+[![License](https://img.shields.io/packagist/l/agentlens/agentlens.svg)](https://packagist.org/packages/agentlens/agentlens)
+
 When your Laravel app crashes in dev, the log is a wall of noise: 80-frame stack traces, the same error repeated 50 times by a retry loop, ANSI colors and Whoops boxes. You can skim past it — but an AI agent debugging your app (Claude Code, Cursor, Gemini CLI, …) burns thousands of tokens on the exact same wall of text.
 
 `agentlens` fixes that with one command:
