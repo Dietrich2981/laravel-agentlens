@@ -5,7 +5,8 @@ use Agentlens\Dedupe\CacheDedupeStore;
 use Agentlens\Dedupe\FingerprintGenerator;
 use Agentlens\Exceptions\AgentlensExceptionReporter;
 use Agentlens\Formatting\LogRecordDTO;
-use Agentlens\Logging\AgentlensHandler;use Agentlens\Sql\LastQueryBuffer;
+use Agentlens\Logging\AgentlensHandler;
+use Agentlens\Sql\LastQueryBuffer;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -162,3 +163,26 @@ test('force-mode normalization covers env string variants', function (mixed $val
     'null' => [null, null],
     'unknown word' => ['maybe', null],
 ]);
+
+test('hook stays silent when default channel is agentlens itself', function () {
+    $spy = new class extends AgentlensExceptionReporter {
+        public static int $calls = 0;
+
+        public function report(Throwable $e): void
+        {
+            static::$calls++;
+            parent::report($e);
+        }
+    };
+    $spy::$calls = 0;
+    $this->app->singleton(AgentlensExceptionReporter::class, fn () => $spy);
+
+    config()->set('logging.default', 'agentlens');
+
+    $handler = $this->app->make(Illuminate\Contracts\Debug\ExceptionHandler::class);
+    $handler->report(new RuntimeException('direct default'));
+
+    // Hook never fired; the single default-channel write carries it.
+    expect(get_class($spy)::$calls)->toBe(0)
+        ->and($this->agentlensLines())->toHaveCount(1);
+});

@@ -1,6 +1,7 @@
 <?php
 
 use Agentlens\Contracts\AgentDetector;
+use Agentlens\Contracts\DedupeStore;
 use Agentlens\Contracts\LogEntryFormatter;
 use Agentlens\Contracts\MessageNormalizer;
 use Agentlens\Dedupe\FingerprintGenerator;
@@ -63,4 +64,45 @@ test('custom formatter can be bound via the container', function () {
     Log::channel('agentlens')->error('hello custom');
 
     expect($this->agentlensLines())->toBe(['CUSTOM:hello custom']);
+});
+
+test('minimal custom store without capabilities degrades gracefully', function () {
+    $this->app->singleton(DedupeStore::class, fn () => new class implements DedupeStore {
+        private array $seen = [];
+
+        public function shouldEmit(string $fingerprint, int $windowSeconds): bool
+        {
+            if (isset($this->seen[$fingerprint])) {
+                return false;
+            }
+            $this->seen[$fingerprint] = true;
+
+            return true;
+        }
+
+        public function incrementAndGetCount(string $fingerprint): int
+        {
+            return 1;
+        }
+
+        public function flushSummaries(): array
+        {
+            return [];
+        }
+    });
+
+    try {
+        $this->app->make(AgentlensHandler::class)->close();
+    } catch (\Throwable) {
+    }
+    $this->app->forgetInstance(AgentlensHandler::class);
+    Log::forgetChannel('agentlens');
+
+    Log::channel('agentlens')->error('plain custom');
+    Log::channel('agentlens')->error('plain custom');
+
+    // No meta/capability calls, no final drain — still exactly one line, no crash.
+    $this->app->make(AgentlensHandler::class)->flushFinal();
+
+    expect($this->agentlensLines())->toHaveCount(1);
 });

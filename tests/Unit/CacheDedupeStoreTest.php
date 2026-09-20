@@ -75,13 +75,27 @@ test('expired-only sweep reports quiet windows and skips hot ones', function () 
 });
 
 test('meta round-trips through the cache', function () {
-    $store = makeCacheStore();
+    $repository = new Repository(new ArrayStore);
+    $store = new CacheDedupeStore($repository);
 
     expect($store->lookupMeta('fp'))->toBeNull();
 
     $store->noteMeta('fp', 'error', 'burst across instances');
 
     expect($store->lookupMeta('fp'))->toBe(['level' => 'error', 'message' => 'burst across instances']);
+
+    $repository->put('agentlens:dedupe:meta:bad', 'garbage');
+
+    expect($store->lookupMeta('bad'))->toBeNull();
+});
+
+test('flush works with default window when nothing was ever seen', function () {
+    $repository = new Repository(new ArrayStore);
+    $store = new CacheDedupeStore($repository);
+
+    $repository->put('agentlens:dedupe:pending', ['fp' => 7]);
+
+    expect($store->flushSummaries())->toBe(['fp' => 7]);
 });
 
 test('burst then silence is reported on the next flush after the window', function () {
