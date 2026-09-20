@@ -66,9 +66,15 @@ A mirror file the agent never opens is worthless, so the package announces itsel
    ## Logs
    When debugging runtime errors, read `storage/logs/agentlens.log` (compact
    deduped JSON: `lvl/msg/at/ctx/sql/count/trace_top`, summaries carry
-   `window_s`). The human log `storage/logs/laravel.log` is the same events,
-   verbose. Force agent logging with `AGENTLENS_FORCE=true`.
+   `window_s`). Ritual: reproduce the bug, run `php artisan agentlens:flush`,
+   then read the file — totals are exact, no waiting. The human log
+   `storage/logs/laravel.log` is the same events, verbose.
+   Force agent logging with `AGENTLENS_FORCE=true`.
    ```
+
+   `php artisan agentlens:flush` (agent mode only) writes pending and
+   in-progress summaries immediately — the deterministic way to see totals
+   without waiting for window rollover or process shutdown.
 
 ## Benchmarks
 

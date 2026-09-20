@@ -84,7 +84,23 @@ class AgentlensServiceProvider extends ServiceProvider
         $this->registerExceptionHook();
         $this->registerLastQueryBuffer();
         $this->registerSummaryFlush();
+        $this->registerCommands();
         $this->announceToStderr();
+    }
+
+    /**
+     * Agent-only artisan commands. Registered behind the same gate, so
+     * `artisan list` in human mode stays untouched.
+     */
+    protected function registerCommands(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        $this->commands([
+            \Agentlens\Console\FlushCommand::class,
+        ]);
     }
 
     /** One-time STDERR pointer so the agent discovers the mirror file. */

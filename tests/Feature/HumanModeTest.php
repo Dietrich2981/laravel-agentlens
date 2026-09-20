@@ -43,3 +43,8 @@ test('force mode fully bypasses the detector', function () {
 
     expect($provider->isAgentMode())->toBeTrue();
 });
+
+test('no artisan commands leak into human mode', function () {
+    expect(fn () => $this->artisan('agentlens:flush'))
+        ->toThrow(Symfony\Component\Console\Exception\CommandNotFoundException::class);
+});

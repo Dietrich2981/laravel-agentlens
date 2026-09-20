@@ -79,3 +79,18 @@ test('stack-covered exceptions are written exactly once per report', function ()
     expect($lines)->toHaveCount(2)
         ->and(json_decode($lines[1], true))->toMatchArray(['count' => 3]);
 });
+
+test('agentlens flush command writes pending totals on demand', function () {
+    Log::channel('agentlens')->error('flush me');
+    Log::channel('agentlens')->error('flush me');
+    Log::channel('agentlens')->error('flush me');
+
+    expect($this->agentlensLines())->toHaveCount(1);
+
+    $this->artisan('agentlens:flush')->assertOk();
+
+    $lines = $this->agentlensLines();
+
+    expect($lines)->toHaveCount(2)
+        ->and(json_decode($lines[1], true))->toMatchArray(['count' => 3]);
+});
