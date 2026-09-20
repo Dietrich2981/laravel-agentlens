@@ -21,7 +21,7 @@ And the part that matters most: **you notice nothing.** Your terminal, Telescope
 **The difference, measured** ([benchmarks](#benchmarks)): 50 identical crashes go from ~170 KB / ~42,000 tokens of repeated stack traces to 3 lines / ~226 tokens — a 99.5% reduction.
 
 <details>
-<summary>▶ 30-second demo: 50 crashes → 3 lines</summary>
+<summary>▶ Step-by-step demo: from 50 crashes to 3 log lines</summary>
 
 ![demo](demo.gif)
 
