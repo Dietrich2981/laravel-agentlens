@@ -156,6 +156,7 @@ app()->singleton(DedupeStore::class, fn ($app) => new \Agentlens\Dedupe\CacheDed
 - `ArrayDedupeStore` prunes expired entries past 1000 keys, but for workers set `'dedupe.store' => 'cache'` so repeats dedupe *across requests* on the same worker.
 - Same for `php artisan serve` / FPM: every request bootstraps a fresh app, so the in-memory `array` store cannot dedupe across requests there either — use the `cache` store (`AGENTLENS_DEDUPE_STORE=cache`) when errors are triggered via HTTP.
 - Two-tier summary flush: framework termination / Octane `RequestTerminated` drain completed windows only (safe per request, never spams); PHP shutdown drains in-progress windows too — fully on CLI, expired-only sweep on web SAPIs (where shutdown fires per request while the process lives on).
+- The per-request flush also sweeps expired open windows (throttled to one sweep per window on shared stores), so a burst followed by silence is reported as soon as any later request ends — even an unrelated one, with the original message attached. Only a forever-idle, hard-killed process can orphan a trailing count (the full record itself is always emitted immediately).
 - The log stream is append-mode with `flock()`; the path is resolved lazily per write.
 
 ## Design decisions (locked for v1)

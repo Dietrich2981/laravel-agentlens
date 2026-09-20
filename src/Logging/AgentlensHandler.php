@@ -77,6 +77,11 @@ class AgentlensHandler extends AbstractProcessingHandler
         $this->writePendingSummaries();
 
         $dto->count = $this->store->incrementAndGetCount($fingerprint);
+
+        if ($this->store instanceof \Agentlens\Contracts\RemembersMeta) {
+            $this->store->noteMeta($fingerprint, $dto->level, $dto->message);
+        }
+
         $this->writeLine($this->entryFormatter->format($dto));
 
         return false === $this->bubble;
@@ -123,7 +128,13 @@ class AgentlensHandler extends AbstractProcessingHandler
 
     protected function writeSummaryLine(string $fingerprint, int $count): void
     {
-        $meta = $this->meta[$fingerprint] ?? ['level' => 'error', 'message' => '[repeated log]'];
+        // Own sightings first, then the store (a sweep may run in a process
+        // that never saw the record — serve burst, silence, other request).
+        $meta = $this->meta[$fingerprint]
+            ?? ($this->store instanceof \Agentlens\Contracts\RemembersMeta
+                ? $this->store->lookupMeta($fingerprint)
+                : null)
+            ?? ['level' => 'error', 'message' => '[repeated log]'];
 
         if ($this->entryFormatter instanceof CompactJsonFormatter) {
             $line = $this->entryFormatter->formatSummary($meta['level'], $meta['message'], $count, $this->windowSeconds());

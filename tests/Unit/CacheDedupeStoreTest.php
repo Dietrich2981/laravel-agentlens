@@ -58,8 +58,7 @@ test('expired window totals survive in pending summaries', function () {
     expect($store->flushSummaries()['fp'] ?? 0)->toBeGreaterThanOrEqual(2);
 });
 
-test('expired-only sweep reports quiet windows and skips hot ones', function () {
-    $hot = makeCacheStore();
+test('expired-only sweep reports quiet windows and skips hot ones', function () {    $hot = makeCacheStore();
     $hot->shouldEmit('fp', 60);
     $hot->incrementAndGetCount('fp');
     $hot->incrementAndGetCount('fp'); // suppressed, window still open
@@ -73,4 +72,35 @@ test('expired-only sweep reports quiet windows and skips hot ones', function () 
 
     // Zero-second window: already expired at flush time.
     expect($old->flushOpenWindows(0, true))->toBe(['fp' => 2]);
+});
+
+test('meta round-trips through the cache', function () {
+    $store = makeCacheStore();
+
+    expect($store->lookupMeta('fp'))->toBeNull();
+
+    $store->noteMeta('fp', 'error', 'burst across instances');
+
+    expect($store->lookupMeta('fp'))->toBe(['level' => 'error', 'message' => 'burst across instances']);
+});
+
+test('burst then silence is reported on the next flush after the window', function () {
+    // The user's scenario: 50 errors, then quiet, then an unrelated request.
+    $repository = new Repository(new ArrayStore);
+    $first = new CacheDedupeStore($repository);
+
+    $first->shouldEmit('fp', 60);
+    for ($i = 0; $i < 50; $i++) {
+        $first->incrementAndGetCount('fp');
+    }
+
+    // Window passes with no new sighting (backdate the clock).
+    $repository->put('agentlens:dedupe:seen:fp', time() - 120);
+
+    // A later request — even one that logs nothing of its own.
+    $second = new CacheDedupeStore($repository);
+
+    expect($second->flushSummaries())->toBe(['fp' => 50])
+        // Throttled: an immediate second flush stays silent.
+        ->and($second->flushSummaries())->toBe([]);
 });

@@ -1,8 +1,11 @@
 <?php
 
+use Agentlens\Contracts\DedupeStore;
+use Agentlens\Dedupe\CacheDedupeStore;
+use Agentlens\Dedupe\FingerprintGenerator;
 use Agentlens\Exceptions\AgentlensExceptionReporter;
-use Agentlens\Logging\AgentlensHandler;
-use Agentlens\Sql\LastQueryBuffer;
+use Agentlens\Formatting\LogRecordDTO;
+use Agentlens\Logging\AgentlensHandler;use Agentlens\Sql\LastQueryBuffer;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -97,8 +100,45 @@ test('cache dedupe store can be selected via config', function () {
     expect($this->agentlensLines())->toHaveCount(1);
 });
 
-test('force-mode normalization covers env string variants', function (mixed $value, ?bool $expected) {
-    $provider = $this->app->getProvider(Agentlens\AgentlensServiceProvider::class);
+test('sweep summary keeps the original message across processes', function () {
+    $this->app->singleton(
+        DedupeStore::class,
+        fn ($app) => new CacheDedupeStore($app['cache']->store('array'))
+    );
+
+    Log::channel('agentlens')->error('burst across instances');
+    Log::channel('agentlens')->error('burst across instances');
+
+    // The window goes quiet with no new sighting (backdate the clock,
+    // including the sweep throttle so the next flush may run).
+    $fp = $this->app->make(FingerprintGenerator::class)->forRecord(
+        new LogRecordDTO(level: 'error', message: 'burst across instances')
+    );
+    $this->app['cache']->store('array')->put('agentlens:dedupe:seen:'.$fp, time() - 120);
+    $this->app['cache']->store('array')->put('agentlens:dedupe:lastsweep', time() - 120);
+
+    // Fresh handler = another request that never saw the burst.
+    $this->app->make(AgentlensHandler::class)->close();
+    $this->app->forgetInstance(AgentlensHandler::class);
+    Log::forgetChannel('agentlens');
+
+    Log::channel('agentlens')->error('something entirely different');
+
+    $this->app->make(AgentlensHandler::class)->flushSummaries();
+
+    $summaries = array_values(array_filter(
+        $this->agentlensLines(),
+        fn ($line) => isset(json_decode($line, true)['window_s'])
+    ));
+
+    expect($summaries)->toHaveCount(1)
+        ->and(json_decode($summaries[0], true))->toMatchArray([
+            'msg' => 'burst across instances',
+            'count' => 2,
+        ]);
+});
+
+test('force-mode normalization covers env string variants', function (mixed $value, ?bool $expected) {    $provider = $this->app->getProvider(Agentlens\AgentlensServiceProvider::class);
     $method = new ReflectionMethod($provider, 'normalizeForced');
     $method->setAccessible(true);
 

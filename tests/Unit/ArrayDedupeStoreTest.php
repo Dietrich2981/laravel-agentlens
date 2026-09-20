@@ -86,13 +86,43 @@ test('expired-only sweep reports quiet windows and skips hot ones', function () 
         ->and($store->flushOpenWindows(60))->toBe(['fp' => 2]);
 });
 
+test('per-request flush sweeps expired open windows', function () {
+    $store = new ArrayDedupeStore;
+
+    $store->shouldEmit('fp', 60);
+    $store->incrementAndGetCount('fp');
+    $store->incrementAndGetCount('fp');
+
+    // Simulate a long-quiet window without a new sighting.
+    $entries = new ReflectionProperty($store, 'entries');
+    $entries->setAccessible(true);
+    $map = $entries->getValue($store);
+    $map['fp']['seen'] -= 120;
+    $entries->setValue($store, $map);
+
+    expect($store->flushSummaries())->toBe(['fp' => 2])
+        ->and($store->flushSummaries())->toBe([]);
+});
+
 test('clear resets everything', function () {
     $store = new ArrayDedupeStore;
 
     $store->shouldEmit('fp', 60);
     $store->incrementAndGetCount('fp');
+    $store->noteMeta('fp', 'error', 'boom');
     $store->clear();
 
     expect($store->shouldEmit('fp', 60))->toBeTrue()
-        ->and($store->flushSummaries())->toBe([]);
+        ->and($store->flushSummaries())->toBe([])
+        ->and($store->lookupMeta('fp'))->toBeNull();
+});
+
+test('meta round-trips', function () {
+    $store = new ArrayDedupeStore;
+
+    expect($store->lookupMeta('fp'))->toBeNull();
+
+    $store->noteMeta('fp', 'warning', 'heads up');
+
+    expect($store->lookupMeta('fp'))->toBe(['level' => 'warning', 'message' => 'heads up']);
 });
