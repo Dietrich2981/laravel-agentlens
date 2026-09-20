@@ -70,7 +70,7 @@ A mirror file the agent never opens is worthless, so the package announces itsel
 3. **(Manual, recommended) AGENTS.md.** For repo-level persistence, copy this block into your `AGENTS.md` / `CLAUDE.md`:
    ```md
    ## Logs (agentlens)
-   When debugging runtime errors: reproduce the bug, run `php artisan agentlens:flush`, then read `storage/logs/agentlens.log`. The flush matters: without it, repeated-error totals appear only after the ~10s window or process end. The log is compact deduped JSON (`lvl/msg/at/ctx/sql/count/trace_top`, summaries carry `window_s`); the human log `storage/logs/laravel.log` holds the same events, verbose.
+   When debugging runtime errors: reproduce the bug, run `php artisan agentlens:flush`, then read `storage/logs/agentlens.log`. The flush matters: without it, repeated-error totals appear only after the window rolls over or the process ends. The log is compact deduped JSON (`lvl/msg/at/ctx/sql/count/trace_top`, summaries carry `window_s`); the human log `storage/logs/laravel.log` holds the same events, verbose.
    ```
 
 ## Benchmarks
