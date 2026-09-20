@@ -2,4 +2,5 @@
 /.phpunit.cache/
 /.phpunit.result.cache
 /.vs/
+/PROMO.md
 composer.lock
