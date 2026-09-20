@@ -51,7 +51,7 @@ AGENTLENS_FORCE=false php artisan serve  # byte-identical behaviour to no packag
 1. **Detect (once per lifecycle).** `EnvAndTtyAgentDetector` checks known agent CLI env vars (`CLAUDECODE`, `CURSOR_TRACE_ID`, `GEMINI_CLI`, … — full list in `AGENT_ENV_VARS`, extendable via `agentlens.detect.env_vars`) plus a non-TTY-stdout heuristic for CLI processes. The verdict is cached; detection never runs per log call.
 2. **Zero-overhead gate.** If the verdict is negative, the provider returns from `boot()` early: no log channel, no exception hook, no `DB::listen()`. Not "disabled by a flag" — physically not registered.
 3. **Agent mode.** The `agentlens` Monolog channel is appended to the active `stack`, unhandled exceptions get a compact copy via `Handler::reportable()`, and only the *last* query is buffered via `DB::listen()` (constant memory) so `QueryException`s can carry their failed SQL.
-4. **Compact + dedupe.** Each record becomes one JSON line (short keys: `lvl`, `msg`, `at`, `ctx`, `sql`, `count`, `trace_top`), trace trimmed to `max_frames` with vendor frames collapsed, repeats inside `window_seconds` suppressed and counted, drained windows flushed as one summary line on termination.
+4. **Compact + dedupe.** Each record becomes one JSON line (short keys: `lvl`, `msg`, `at`, `ctx`, `sql`, `count`, `trace_top`), trace trimmed to `max_frames` with vendor frames collapsed, repeats inside `window_seconds` suppressed and counted, drained windows flushed as one summary line on termination. Counts are exact — the hook never double-writes when the stack already routes to `agentlens` — and a summary's `count` is the window total including the emitted record.
 
 ```json
 {"lvl":"error","msg":"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry","at":"app/Http/Controllers/OrderController.php:42","ctx":{"order_id":881},"sql":"insert into `orders` (...) values (...)","count":1,"trace_top":["OrderController::store (app/Http/Controllers/OrderController.php:42)","(vendor skipped: 27 frames)"]}
@@ -180,13 +180,6 @@ app()->singleton(DedupeStore::class, fn ($app) => new \Agentlens\Dedupe\CacheDed
 - Two-tier summary flush: framework termination / Octane `RequestTerminated` drain completed windows only (safe per request, never spams); PHP shutdown drains in-progress windows too — fully on CLI, expired-only sweep on web SAPIs (where shutdown fires per request while the process lives on).
 - The per-request flush also sweeps expired open windows (throttled to one sweep per window on shared stores), so a burst followed by silence is reported as soon as any later request ends — even an unrelated one, with the original message attached. Only a forever-idle, hard-killed process can orphan a trailing count (the full record itself is always emitted immediately).
 - The log stream is append-mode with `flock()`; the path is resolved lazily per write.
-
-## Design decisions (locked for v1)
-
-1. **Dedupe emits a summary line when the window drains** (not a streaming in-place counter update): a log file is append-only, so mutating the already-written line is impossible without fragile bookkeeping. `count` on a full line is always 1 on first emission; the summary's `count` is the total occurrences in the window *including* the emitted one.
-2. **No double-writes.** The exception hook checks at report time whether the default stack already routes to `agentlens` — if yes, it stays silent and lets the stack carry the single record. The direct write only fires when the stack would NOT capture the exception (e.g. default is a plain `single` channel). Dedupe remains as a backstop for any residual duplicates, so `count` is exact in the common case: 50 crashing requests report `count: 50`.
-3. **Fingerprint normalization is a regex heuristic** (`\d+` → `#`, UUIDs → `#`, long hex/ULID-ish tokens → `#`) as the default, with `MessageNormalizer` replaceable via the container for domain-specific templates.
-4. **Package / namespace is `agentlens/agentlens` → `Agentlens\`.** Rename the vendor segment when publishing under your own Packagist account; it appears only in `composer.json` and the PSR-4 prefix.
 
 ## How this differs from PAO (`laravel/pao`)
 
