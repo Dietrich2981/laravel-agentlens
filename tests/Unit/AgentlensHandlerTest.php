@@ -86,8 +86,29 @@ test('flushing twice does not duplicate summaries', function () {
     Log::channel('agentlens')->error('repeat me');
     Log::channel('agentlens')->error('repeat me');
 
+    $handler->flushFinal();
+    $handler->flushFinal();
+
+    $lines = $this->agentlensLines();
+
+    expect($lines)->toHaveCount(2)
+        ->and(json_decode($lines[1], true)['count'])->toBe(3);
+});
+
+test('per-request flush leaves open windows alone, final flush reports them', function () {
+    $handler = $this->app->make(AgentlensHandler::class);
+
+    Log::channel('agentlens')->error('burst');
+    Log::channel('agentlens')->error('burst');
+    Log::channel('agentlens')->error('burst');
+
+    // Safe per request (serve, Octane): no per-request summary spam.
     $handler->flushSummaries();
-    $handler->flushSummaries();
+
+    expect($this->agentlensLines())->toHaveCount(1);
+
+    // True process end: the total is reported once.
+    $handler->flushFinal();
 
     $lines = $this->agentlensLines();
 

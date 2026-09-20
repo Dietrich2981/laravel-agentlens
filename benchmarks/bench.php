@@ -138,7 +138,7 @@ try {
     for ($i = 0; $i < 50; $i++) {
         $benchHandler->handle($benchRecord);
     }
-    $benchHandler->flushSummaries();
+    $benchHandler->flushFinal();
 }
 
 $afterBytes = file_exists($benchFile) ? filesize($benchFile) : 0;

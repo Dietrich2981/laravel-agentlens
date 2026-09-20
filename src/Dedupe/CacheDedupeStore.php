@@ -3,6 +3,7 @@
 namespace Agentlens\Dedupe;
 
 use Agentlens\Contracts\DedupeStore;
+use Agentlens\Contracts\FlushesOpenWindows;
 use Illuminate\Contracts\Cache\Repository;
 
 /**
@@ -12,7 +13,7 @@ use Illuminate\Contracts\Cache\Repository;
  *
  * Same drain semantics as ArrayDedupeStore; see that class for details.
  */
-class CacheDedupeStore implements DedupeStore
+class CacheDedupeStore implements DedupeStore, FlushesOpenWindows
 {
     protected const KEY_PREFIX = 'agentlens:dedupe:';
 
@@ -58,17 +59,40 @@ class CacheDedupeStore implements DedupeStore
         return is_numeric($value) ? (int) $value : 1;
     }
 
+    /**
+     * Drain completed windows only (safe per request; open windows untouched).
+     */
     public function flushSummaries(): array
     {
         $out = (array) $this->cache->get($this->pendingKey(), []);
         $this->cache->put($this->pendingKey(), [], $this->keyTtlSeconds);
 
+        return $out;
+    }
+
+    /**
+     * Drain in-progress windows too. Called once at true process end.
+     */
+    public function flushOpenWindows(int $windowSeconds, bool $onlyExpired = false): array
+    {
+        $out = [];
+        $now = time();
+
         foreach ($this->trackedKeys() as $fingerprint) {
             $count = (int) $this->cache->get($this->countKey($fingerprint), 0);
-            if ($count > 1) {
-                $out[$fingerprint] = ($out[$fingerprint] ?? 0) + $count;
-                $this->cache->put($this->countKey($fingerprint), 1, $this->keyTtlSeconds);
+            if ($count <= 1) {
+                continue;
             }
+
+            if ($onlyExpired) {
+                $seen = $this->cache->get($this->seenKey($fingerprint));
+                if ($seen === null || (($now - (int) $seen) < $windowSeconds)) {
+                    continue;
+                }
+            }
+
+            $out[$fingerprint] = $count;
+            $this->cache->put($this->countKey($fingerprint), 1, $this->keyTtlSeconds);
         }
 
         return $out;

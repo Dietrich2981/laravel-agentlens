@@ -297,9 +297,11 @@ class AgentlensServiceProvider extends ServiceProvider
     }
 
     /**
-     * Flush dedupe summaries at the end of the lifecycle. Covers classic
-     * requests/commands (terminating) and Octane workers (RequestTerminated,
-     * when octane is installed).
+     * Two-tier summary flush:
+     * - terminating / RequestTerminated: completed windows only — safe to run
+     *   per request (serve, Octane), never spams per-request summaries;
+     * - PHP shutdown: final drain including in-progress windows — runs once
+     *   at true process end (command, FPM request, serve Ctrl+C, worker end).
      */
     protected function registerSummaryFlush(): void
     {
@@ -311,8 +313,22 @@ class AgentlensServiceProvider extends ServiceProvider
             }
         };
 
+        $flushFinal = function () {
+            try {
+                $this->app->make(AgentlensHandler::class)->flushFinal();
+            } catch (\Throwable) {
+                // Never break shutdown.
+            }
+        };
+
         try {
             $this->app->terminating($flush);
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        try {
+            register_shutdown_function($flushFinal);
         } catch (\Throwable) {
             // ignore
         }

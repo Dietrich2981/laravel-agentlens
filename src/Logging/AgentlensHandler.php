@@ -83,31 +83,59 @@ class AgentlensHandler extends AbstractProcessingHandler
     }
 
     /**
-     * Write one summary line per drained fingerprint. Safe to call any time;
-     * emits nothing when there is nothing to report.
+     * Write one summary line per drained completed window. Safe to call any
+     * time (e.g. per request); emits nothing when there is nothing to report.
      */
     public function flushSummaries(): void
     {
         $this->writePendingSummaries();
     }
 
+    /**
+     * Final drain at process end (PHP shutdown): completed windows plus
+     * in-progress ones. Writes nothing when the handler never emitted.
+     *
+     * On web SAPIs (serve, FPM, …) shutdown fires per request while the
+     * process lives on, so only already-expired windows are reported —
+     * recurring errors still surface via rollover on the next request.
+     */
+    public function flushFinal(): void
+    {
+        $this->writePendingSummaries();
+
+        if (! $this->store instanceof \Agentlens\Contracts\FlushesOpenWindows) {
+            return;
+        }
+
+        $onlyExpired = ! in_array(PHP_SAPI, ['cli', 'phpdbg'], true);
+
+        foreach ($this->store->flushOpenWindows($this->windowSeconds(), $onlyExpired) as $fingerprint => $count) {
+            $this->writeSummaryLine($fingerprint, (int) $count);
+        }
+    }
+
     protected function writePendingSummaries(): void
     {
         foreach ($this->store->flushSummaries() as $fingerprint => $count) {
-            $meta = $this->meta[$fingerprint] ?? ['level' => 'error', 'message' => '[repeated log]'];
-
-            if ($this->entryFormatter instanceof CompactJsonFormatter) {
-                $line = $this->entryFormatter->formatSummary($meta['level'], $meta['message'], (int) $count, $this->windowSeconds());
-            } else {
-                $line = $this->entryFormatter->format(new LogRecordDTO(
-                    level: $meta['level'],
-                    message: $meta['message'].' (repeated '.$count.'x)',
-                    count: (int) $count,
-                ));
-            }
-
-            $this->writeLine($line);
+            $this->writeSummaryLine($fingerprint, (int) $count);
         }
+    }
+
+    protected function writeSummaryLine(string $fingerprint, int $count): void
+    {
+        $meta = $this->meta[$fingerprint] ?? ['level' => 'error', 'message' => '[repeated log]'];
+
+        if ($this->entryFormatter instanceof CompactJsonFormatter) {
+            $line = $this->entryFormatter->formatSummary($meta['level'], $meta['message'], $count, $this->windowSeconds());
+        } else {
+            $line = $this->entryFormatter->format(new LogRecordDTO(
+                level: $meta['level'],
+                message: $meta['message'].' (repeated '.$count.'x)',
+                count: $count,
+            ));
+        }
+
+        $this->writeLine($line);
     }
 
     protected function writeLine(string $line): void

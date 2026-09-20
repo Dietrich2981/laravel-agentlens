@@ -23,7 +23,7 @@ test('dedupe can be switched off at runtime', function () {
     expect($this->agentlensLines())->toHaveCount(5);
 });
 
-test('application termination flushes the pending summary', function () {
+test('request termination writes no per-request spam, process end reports the total', function () {
     $reporter = $this->app->make(AgentlensExceptionReporter::class);
     $exception = new RuntimeException('terminate flush');
 
@@ -33,7 +33,13 @@ test('application termination flushes the pending summary', function () {
 
     expect($this->agentlensLines())->toHaveCount(1);
 
+    // Framework termination (per request under serve/Octane): silent.
     $this->app->terminate();
+
+    expect($this->agentlensLines())->toHaveCount(1);
+
+    // True process end (PHP shutdown): one summary with the total.
+    $this->app->make(AgentlensHandler::class)->flushFinal();
 
     $lines = $this->agentlensLines();
 

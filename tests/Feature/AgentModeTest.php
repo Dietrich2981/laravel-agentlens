@@ -37,7 +37,7 @@ test('50 identical exceptions produce exactly one full record plus one summary',
 
     expect($this->agentlensLines())->toHaveCount(1);
 
-    $this->app->make(AgentlensHandler::class)->flushSummaries();
+    $this->app->make(AgentlensHandler::class)->flushFinal();
 
     $lines = $this->agentlensLines();
 

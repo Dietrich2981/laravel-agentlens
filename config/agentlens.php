@@ -34,7 +34,7 @@ return [
 
     'dedupe' => [
         'enabled' => true,
-        'window_seconds' => 10,
+        'window_seconds' => env('AGENTLENS_DEDUPE_WINDOW', 10),
         // array = in-memory (per process/request). cache = shared Laravel
         // cache store, required for Octane workers to dedupe across requests.
         'store' => env('AGENTLENS_DEDUPE_STORE', 'array'), // array|cache

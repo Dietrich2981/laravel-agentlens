@@ -113,7 +113,7 @@ return [
     'enabled' => env('AGENTLENS_ENABLED', true),
     'force_agent_mode' => env('AGENTLENS_FORCE', null), // null = auto-detect
     'detect' => ['env_vars' => []],                     // merged with AGENT_ENV_VARS
-    'dedupe' => ['enabled' => true, 'window_seconds' => 10, 'store' => env('AGENTLENS_DEDUPE_STORE', 'array')],
+    'dedupe' => ['enabled' => true, 'window_seconds' => env('AGENTLENS_DEDUPE_WINDOW', 10), 'store' => env('AGENTLENS_DEDUPE_STORE', 'array')],
     'trace' => ['max_frames' => 3, 'skip_vendor_frames' => true],
     'sql' => ['enabled' => true, 'include_failed_query' => true, 'max_query_length' => 500],
     'exceptions' => ['capture_unhandled' => true],
@@ -154,14 +154,16 @@ app()->singleton(DedupeStore::class, fn ($app) => new \Agentlens\Dedupe\CacheDed
 
 - Detection verdict is process-cached env state — safe in workers.
 - `ArrayDedupeStore` prunes expired entries past 1000 keys, but for workers set `'dedupe.store' => 'cache'` so repeats dedupe *across requests* on the same worker.
-- Summaries flush on `$app->terminating()` and additionally on Octane's `RequestTerminated` event when `laravel/octane` is installed.
+- Same for `php artisan serve` / FPM: every request bootstraps a fresh app, so the in-memory `array` store cannot dedupe across requests there either — use the `cache` store (`AGENTLENS_DEDUPE_STORE=cache`) when errors are triggered via HTTP.
+- Two-tier summary flush: framework termination / Octane `RequestTerminated` drain completed windows only (safe per request, never spams); PHP shutdown drains in-progress windows too — fully on CLI, expired-only sweep on web SAPIs (where shutdown fires per request while the process lives on).
 - The log stream is append-mode with `flock()`; the path is resolved lazily per write.
 
 ## Design decisions (locked for v1)
 
 1. **Dedupe emits a summary line when the window drains** (not a streaming in-place counter update): a log file is append-only, so mutating the already-written line is impossible without fragile bookkeeping. `count` on a full line is always 1 on first emission; the summary's `count` is the total occurrences in the window *including* the emitted one.
-2. **Fingerprint normalization is a regex heuristic** (`\d+` → `#`, UUIDs → `#`, long hex/ULID-ish tokens → `#`) as the default, with `MessageNormalizer` replaceable via the container for domain-specific templates.
-3. **Package / namespace is `agentlens/agentlens` → `Agentlens\`.** Rename the vendor segment when publishing under your own Packagist account; it appears only in `composer.json` and the PSR-4 prefix.
+2. **`count` counts log-record attempts, not HTTP requests.** An unhandled exception under the default stack is written twice by design — once by the exception hook (reliable even if the stack is misconfigured) and once via the stack itself — and dedupe absorbs both into one line. So 50 crashing requests legitimately report `count: 100`.
+3. **Fingerprint normalization is a regex heuristic** (`\d+` → `#`, UUIDs → `#`, long hex/ULID-ish tokens → `#`) as the default, with `MessageNormalizer` replaceable via the container for domain-specific templates.
+4. **Package / namespace is `agentlens/agentlens` → `Agentlens\`.** Rename the vendor segment when publishing under your own Packagist account; it appears only in `composer.json` and the PSR-4 prefix.
 
 ## How this differs from PAO (`laravel/pao`)
 
