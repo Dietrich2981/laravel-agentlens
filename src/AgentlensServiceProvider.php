@@ -274,10 +274,50 @@ class AgentlensServiceProvider extends ServiceProvider
                     return;
                 }
 
+                if ($this->stackAlreadyCaptures()) {
+                    return;
+                }
+
                 $this->app->make(AgentlensExceptionReporter::class)->report($e);
             });
         } catch (\Throwable) {
             // Handler contract changed under us — human reporting untouched.
+        }
+    }
+
+    /**
+     * True when default reporting already delivers the record to our channel
+     * (default IS `agentlens`, or a stack containing it). Checked at report
+     * time against runtime config, so the hook never double-writes. On any
+     * doubt returns false — a duplicate write is harmless (dedupe absorbs
+     * it), a missed exception is not. Direct reporter calls always write.
+     */
+    protected function stackAlreadyCaptures(): bool
+    {
+        try {
+            if (! function_exists('config')) {
+                return false;
+            }
+
+            $channel = config('agentlens.logging.channel', 'agentlens');
+            if (! is_string($channel) || $channel === '') {
+                $channel = 'agentlens';
+            }
+
+            $default = config('logging.default');
+            if (! is_string($default) || $default === '') {
+                return false;
+            }
+
+            if ($default === $channel) {
+                return true;
+            }
+
+            $channels = config("logging.channels.{$default}.channels");
+
+            return is_array($channels) && in_array($channel, $channels, true);
+        } catch (\Throwable) {
+            return false;
         }
     }
 

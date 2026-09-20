@@ -61,3 +61,21 @@ test('unhandled exceptions are captured via reportable without changing normal r
         ->and(json_decode($lines[0], true)['msg'])->toBe('kaboom via handler')
         ->and(file_get_contents($this->singleLogPath))->toContain('kaboom via handler');
 });
+
+test('stack-covered exceptions are written exactly once per report', function () {
+    // Default stack already routes to agentlens, so the hook stays silent
+    // and each exception produces exactly one record attempt.
+    $handler = $this->app->make(Illuminate\Contracts\Debug\ExceptionHandler::class);
+    $exception = new RuntimeException('exact counts');
+
+    for ($i = 0; $i < 3; $i++) {
+        $handler->report($exception);
+    }
+
+    $this->app->make(AgentlensHandler::class)->flushFinal();
+
+    $lines = $this->agentlensLines();
+
+    expect($lines)->toHaveCount(2)
+        ->and(json_decode($lines[1], true))->toMatchArray(['count' => 3]);
+});

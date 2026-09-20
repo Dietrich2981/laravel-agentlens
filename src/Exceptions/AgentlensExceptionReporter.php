@@ -6,8 +6,10 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Writes the compact agent-facing copy of an unhandled exception to the
- * `agentlens` channel. Always called IN ADDITION to the normal report flow —
- * human-facing behaviour never changes. Never throws.
+ * `agentlens` channel. Always writes when called directly. The automatic
+ * hook in the service provider additionally skips the call when the default
+ * stack already routes to `agentlens` (no duplicate writes).
+ * Human-facing behaviour never changes. Never throws.
  */
 class AgentlensExceptionReporter
 {

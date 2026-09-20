@@ -161,7 +161,7 @@ app()->singleton(DedupeStore::class, fn ($app) => new \Agentlens\Dedupe\CacheDed
 ## Design decisions (locked for v1)
 
 1. **Dedupe emits a summary line when the window drains** (not a streaming in-place counter update): a log file is append-only, so mutating the already-written line is impossible without fragile bookkeeping. `count` on a full line is always 1 on first emission; the summary's `count` is the total occurrences in the window *including* the emitted one.
-2. **`count` counts log-record attempts, not HTTP requests.** An unhandled exception under the default stack is written twice by design — once by the exception hook (reliable even if the stack is misconfigured) and once via the stack itself — and dedupe absorbs both into one line. So 50 crashing requests legitimately report `count: 100`.
+2. **No double-writes.** The exception hook checks at report time whether the default stack already routes to `agentlens` — if yes, it stays silent and lets the stack carry the single record. The direct write only fires when the stack would NOT capture the exception (e.g. default is a plain `single` channel). Dedupe remains as a backstop for any residual duplicates, so `count` is exact in the common case: 50 crashing requests report `count: 50`.
 3. **Fingerprint normalization is a regex heuristic** (`\d+` → `#`, UUIDs → `#`, long hex/ULID-ish tokens → `#`) as the default, with `MessageNormalizer` replaceable via the container for domain-specific templates.
 4. **Package / namespace is `agentlens/agentlens` → `Agentlens\`.** Rename the vendor segment when publishing under your own Packagist account; it appears only in `composer.json` and the PSR-4 prefix.
 
