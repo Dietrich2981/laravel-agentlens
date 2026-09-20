@@ -51,6 +51,18 @@ AGENTLENS_FORCE=false php artisan serve  # byte-identical behaviour to no packag
 {"lvl":"error","msg":"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry","count":50,"window_s":10}
 ```
 
+## Deployment topologies
+
+Agent detection is process-local: it sees the environment of the PHP process running your code, not who sends the HTTP requests. So:
+
+| Who runs the PHP process | Agent does | What you do |
+|---|---|---|
+| Agent: `php artisan serve`, `artisan` commands, tests, queues, agent-started Octane | everything | nothing — zero-config |
+| Human/system: Herd, Sail, Forge, Vapor… | sends HTTP | one line in `.env`: `AGENTLENS_FORCE=true` (remove after debugging, don't commit) |
+| Human | human | nothing — the package sleeps, zero overhead |
+
+For the middle row no code changes are needed: `.env` is read on every request in any SAPI, so the next agent request starts writing `agentlens.log`. (Same single flag via `fastcgi_param AGENTLENS_FORCE true;` in nginx or `environment:` in docker-compose works too.)
+
 ## On-demand totals
 
 Repeat totals are event-driven: they are written on window rollover, process shutdown, or the per-request sweep — never while a burst is still coming in, because the total is unknowable until the burst pauses. So an agent that reads the log right after reproducing a bug sees the full error but a stale count.
