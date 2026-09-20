@@ -51,6 +51,12 @@ AGENTLENS_FORCE=false php artisan serve  # byte-identical behaviour to no packag
 {"lvl":"error","msg":"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry","count":50,"window_s":10}
 ```
 
+## On-demand totals
+
+Repeat totals are event-driven: they are written on window rollover, process shutdown, or the per-request sweep — never while a burst is still coming in, because the total is unknowable until the burst pauses. So an agent that reads the log right after reproducing a bug sees the full error but a stale count.
+
+`php artisan agentlens:flush` (registered in agent mode only) closes that gap: it writes pending and in-progress summaries immediately. Debug ritual: reproduce → flush → read, and the totals are exact with no waiting.
+
 ## Agent discovery
 
 A mirror file the agent never opens is worthless, so the package announces itself — agent mode only, human mode stays silent:
@@ -61,21 +67,11 @@ A mirror file the agent never opens is worthless, so the package announces itsel
    ```
    Written once per file (under an exclusive lock, so concurrent workers can't duplicate it). Disable with `'discovery.header' => false`.
 2. **STDERR pointer.** Once per process on boot: `[agentlens] compact deduped mirror for agents: storage/logs/agentlens.log (human log unchanged)`. STDERR — deliberately, so machine-readable STDOUT (`artisan route:list --json`) never breaks. Skipped under unit tests. Disable with `AGENTLENS_DISCOVERY_STDERR=false` / `'discovery.stderr' => false`.
-3. **(Manual, recommended) AGENTS.md.** For repo-level persistence, copy the whole block below into your `AGENTS.md` / `CLAUDE.md` — command included, it only exists in agent mode:
+3. **(Manual, recommended) AGENTS.md.** For repo-level persistence, copy this block into your `AGENTS.md` / `CLAUDE.md`:
    ```md
    ## Logs (agentlens)
-   When debugging runtime errors, read `storage/logs/agentlens.log` (compact
-   deduped JSON: `lvl/msg/at/ctx/sql/count/trace_top`, summaries carry
-   `window_s`). Ritual — reproduce the bug, then run:
-
-       php artisan agentlens:flush
-
-   ...and only then read the file: totals are exact, no waiting. The human
-   log `storage/logs/laravel.log` holds the same events, verbose.
-   Force agent logging with `AGENTLENS_FORCE=true`.
+   When debugging runtime errors: reproduce the bug, run `php artisan agentlens:flush`, then read `storage/logs/agentlens.log`. The flush matters: without it, repeated-error totals appear only after the ~10s window or process end. The log is compact deduped JSON (`lvl/msg/at/ctx/sql/count/trace_top`, summaries carry `window_s`); the human log `storage/logs/laravel.log` holds the same events, verbose. Force agent logging with `AGENTLENS_FORCE=true`.
    ```
-
-   Note (package behaviour, not for AGENTS.md): `agentlens:flush` writes pending and in-progress summaries immediately — the deterministic way to see totals without waiting for window rollover or process shutdown.
 
 ## Benchmarks
 
