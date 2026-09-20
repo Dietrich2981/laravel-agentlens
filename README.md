@@ -195,7 +195,7 @@ Use both: PAO for red test output, agentlens for red runtime output.
 
 ## Compatibility
 
-PHP `^8.2`, Laravel `^11.0 || ^12.0 || ^13.0` (tested on 12 via Orchestra Testbench; the exception hook uses only the stable `ExceptionHandler::reportable()` contract present across 11–13). Monolog `^3`.
+PHP `^8.2`, Laravel `^11.0 || ^12.0 || ^13.0` (all three covered by CI via Orchestra Testbench; the exception hook uses only the stable `ExceptionHandler::reportable()` contract present across 11–13). Monolog `^3`.
 
 ## Tests
 
